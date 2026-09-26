@@ -1,0 +1,56 @@
+name: PR Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - java: 21
+          os: windows-latest
+          arch: x64
+          runner: windows-latest
+          expander_leg: windows-latest--x64
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v6
+      with:
+        distribution: 'zulu'
+        java-version: ${{ matrix.java }}
+        cache: 'gradle'
+    - name: Set up Gradle (Windows)
+      if: runner.os == 'Windows'
+      uses: gradle/actions/setup-gradle@v6
+      with:
+        gradle-version: '9.6.1'
+    - name: Restore Gradle wrapper jar (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        # The checkout on Windows has no gradle/wrapper/gradle-wrapper.jar, so gradlew cannot start.
+        # Regenerate the wrapper with the same Gradle version pinned in gradle-wrapper.properties.
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          gradle --no-daemon wrapper --gradle-version 9.6.1
+        fi
+        ls -l gradle/wrapper
+    - name: Build (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        # Windows runners have no sudo, and the locked-memory ulimit does not apply there
+        ./gradlew --no-daemon build
+        echo "Status of build: $?"
+    - name: Build
+      if: runner.os != 'Windows'
+      run: |
+        sudo env "PATH=$PATH" bash -c "ulimit -l 65536 && ulimit -a && ./gradlew --no-daemon build"
+        echo "Status of build: $?"
+    name: build [${{ matrix.expander_leg }}]
+    timeout-minutes: 150
